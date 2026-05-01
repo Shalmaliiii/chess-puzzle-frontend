@@ -64,7 +64,8 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
               const opponentGame = new Chess(gameCopy.fen());
               const from = result.opponentMove.slice(0, 2);
               const to = result.opponentMove.slice(2, 4);
-              const opponentMoveResult = opponentGame.move({ from, to, promotion: 'q' });
+              const promotion = result.opponentMove.length > 4 ? result.opponentMove[4] : undefined;
+              const opponentMoveResult = opponentGame.move({ from, to, promotion: promotion || 'q' });
               if (opponentMoveResult) {
                 newMoveRecord.opponentMove = opponentMoveResult.san;
                 setGame(opponentGame);
