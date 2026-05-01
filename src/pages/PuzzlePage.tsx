@@ -37,7 +37,8 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
     ({ sourceSquare, targetSquare }: { piece: { pieceType: string; isSparePiece: boolean; position: string }; sourceSquare: string; targetSquare: string | null }) => {
       if (isSolved || isFailed || isProcessing || !targetSquare) return false;
 
-      const gameCopy = new Chess(game.fen());
+      const preMovefen = game.fen();
+      const gameCopy = new Chess(preMovefen);
       const move = gameCopy.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
       if (!move) return false;
 
@@ -72,11 +73,13 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
               setStatusMessage('Correct! Keep going...');
             }
           } else {
+            setGame(new Chess(preMovefen));
             setMoves((prev) => [...prev, newMoveRecord]);
-            setStatusMessage('Incorrect move. Try again!');
+            setStatusMessage('Incorrect move. Puzzle failed.');
           }
         })
         .catch(() => {
+          setGame(new Chess(preMovefen));
           setStatusMessage('Error validating move. Please try again.');
         })
         .finally(() => {

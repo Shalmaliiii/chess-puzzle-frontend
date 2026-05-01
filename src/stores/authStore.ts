@@ -31,7 +31,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.setItem('refreshToken', data.refreshToken);
       set({ user: data.user, token: data.token, isAuthenticated: true, isLoading: false });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Login failed';
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      const message = axiosErr.response?.data?.message || (err instanceof Error ? err.message : 'Login failed');
       set({ error: message, isLoading: false });
       throw err;
     }
@@ -45,7 +46,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.setItem('refreshToken', data.refreshToken);
       set({ user: data.user, token: data.token, isAuthenticated: true, isLoading: false });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Registration failed';
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      const message = axiosErr.response?.data?.message || (err instanceof Error ? err.message : 'Registration failed');
       set({ error: message, isLoading: false });
       throw err;
     }
