@@ -46,7 +46,7 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
       setIsProcessing(true);
       setStatusMessage('Checking move...');
 
-      const uciMove = sourceSquare + targetSquare;
+      const uciMove = sourceSquare + targetSquare + (move.promotion || '');
 
       validateMove(uciMove)
         .then((result) => {
