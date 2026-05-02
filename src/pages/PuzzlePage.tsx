@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
-import { FiRefreshCw, FiCheckCircle, FiXCircle, FiArrowRight } from 'react-icons/fi';
+import { FiRefreshCw, FiCheckCircle, FiXCircle, FiArrowRight, FiEye, FiRotateCcw } from 'react-icons/fi';
 import { usePuzzleStore } from '../stores/puzzleStore';
 import LoadingSpinner from '../components/LoadingSpinner';
 import DifficultyBadge from '../components/DifficultyBadge';
@@ -19,12 +19,15 @@ interface MoveRecord {
 const DIFFICULTIES: PuzzleDifficulty[] = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'MASTER'];
 
 function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number | null }) {
-  const { isSolved, isFailed, ratingChange, validateMove, solvePuzzle } = usePuzzleStore();
+  const { isSolved, isFailed, ratingChange, validateMove, solvePuzzle, retryPuzzle, fetchSolution, showingSolution } = usePuzzleStore();
 
   const [game, setGame] = useState(() => new Chess(puzzle.fen));
   const [moves, setMoves] = useState<MoveRecord[]>([]);
   const [statusMessage, setStatusMessage] = useState('Your turn — find the best move!');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [solutionStep, setSolutionStep] = useState(0);
+  const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const boardOrientation = puzzle.sideToMove === 'WHITE' ? 'white' : 'black';
 
   useEffect(() => {
@@ -33,9 +36,59 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
     }
   }, [isSolved, solvePuzzle]);
 
+  useEffect(() => {
+    return () => {
+      if (animationTimerRef.current) clearTimeout(animationTimerRef.current);
+    };
+  }, []);
+
+
+
+  const handleShowSolution = useCallback(async () => {
+    const solution = await fetchSolution();
+    if (!solution || solution.length === 0) return;
+
+    setIsAnimating(true);
+    setStatusMessage('Showing solution...');
+    const animGame = new Chess(puzzle.fen);
+    setGame(new Chess(puzzle.fen));
+    setSolutionStep(0);
+
+    const animateMoves = (index: number) => {
+      if (index >= solution.length) {
+        setStatusMessage('Solution complete');
+        setIsAnimating(false);
+        return;
+      }
+
+      const moveStr = solution[index];
+      const from = moveStr.slice(0, 2);
+      const to = moveStr.slice(2, 4);
+      const promotion = moveStr.length > 4 ? moveStr[4] : undefined;
+
+      try {
+        animGame.move({ from, to, promotion });
+        const newGame = new Chess(animGame.fen());
+        setGame(newGame);
+        setSolutionStep(index + 1);
+
+        const isPlayerMove = index % 2 === 0;
+        const moveLabel = isPlayerMove ? 'Your move' : "Opponent's response";
+        setStatusMessage(`${moveLabel}: ${from}${to}${promotion || ''} (${index + 1}/${solution.length})`);
+
+        animationTimerRef.current = setTimeout(() => animateMoves(index + 1), 1200);
+      } catch {
+        setStatusMessage('Solution animation error');
+        setIsAnimating(false);
+      }
+    };
+
+    animationTimerRef.current = setTimeout(() => animateMoves(0), 500);
+  }, [fetchSolution, puzzle.fen]);
+
   const onDrop = useCallback(
     ({ sourceSquare, targetSquare }: { piece: { pieceType: string; isSparePiece: boolean; position: string }; sourceSquare: string; targetSquare: string | null }) => {
-      if (isSolved || isFailed || isProcessing || !targetSquare) return false;
+      if (isSolved || isFailed || isProcessing || isAnimating || !targetSquare) return false;
 
       const preMovefen = game.fen();
       const gameCopy = new Chess(preMovefen);
@@ -89,7 +142,7 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
 
       return true;
     },
-    [game, isSolved, isFailed, isProcessing, moves, validateMove]
+    [game, isSolved, isFailed, isProcessing, isAnimating, moves, validateMove]
   );
 
   return (
@@ -105,7 +158,7 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
                 boardStyle: { borderRadius: '8px' },
                 darkSquareStyle: { backgroundColor: '#769656' },
                 lightSquareStyle: { backgroundColor: '#eeeed2' },
-                animationDurationInMs: 200,
+                animationDurationInMs: isAnimating ? 600 : 200,
               }}
             />
           </div>
@@ -135,10 +188,13 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
             ? 'bg-green-500/10 border border-green-500/30 text-green-400'
             : isFailed
             ? 'bg-red-500/10 border border-red-500/30 text-red-400'
+            : isAnimating
+            ? 'bg-blue-500/10 border border-blue-500/30 text-blue-400'
             : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'
         }`}>
           {isSolved && <FiCheckCircle className="inline mr-2" size={20} />}
-          {isFailed && <FiXCircle className="inline mr-2" size={20} />}
+          {isFailed && !showingSolution && <FiXCircle className="inline mr-2" size={20} />}
+          {isAnimating && <FiEye className="inline mr-2" size={20} />}
           {statusMessage}
           {ratingChange !== null && (
             <div className="mt-2 text-lg">
@@ -147,7 +203,34 @@ function PuzzleBoard({ puzzle, startTime }: { puzzle: Puzzle; startTime: number 
               </span>
             </div>
           )}
+          {isAnimating && (
+            <div className="mt-2">
+              <div className="w-full bg-[var(--color-bg)] rounded-full h-2">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(solutionStep / (puzzle.mateIn * 2 - 1)) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+
+        {isFailed && !showingSolution && !isAnimating && (
+          <div className="flex gap-3">
+            <button
+              onClick={retryPuzzle}
+              className="flex-1 px-4 py-3 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 border border-yellow-500/30"
+            >
+              <FiRotateCcw size={16} /> Retry
+            </button>
+            <button
+              onClick={handleShowSolution}
+              className="flex-1 px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 border border-blue-500/30"
+            >
+              <FiEye size={16} /> Show Solution
+            </button>
+          </div>
+        )}
 
         <div className="bg-[var(--color-surface)] rounded-xl p-4">
           <h3 className="text-sm font-semibold text-[var(--color-text-muted)] mb-2">Move History</h3>
@@ -166,6 +249,7 @@ export default function PuzzlePage() {
     startTime,
     isSolved,
     isFailed,
+    showingSolution,
     fetchPuzzle,
     resetPuzzle,
   } = usePuzzleStore();
@@ -247,22 +331,31 @@ export default function PuzzlePage() {
     );
   }
 
+  const showNextButton = isSolved || showingSolution;
+  const showSkipButton = !isSolved && !isFailed && !showingSolution;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       {currentPuzzle && (
-        <PuzzleBoard key={currentPuzzle.id} puzzle={currentPuzzle} startTime={startTime} />
+        <PuzzleBoard key={`${currentPuzzle.id}-${startTime}`} puzzle={currentPuzzle} startTime={startTime} />
       )}
       <div className="max-w-7xl mx-auto mt-4 flex justify-center">
-        <button
-          onClick={handleNewPuzzle}
-          className="px-6 py-3 bg-[var(--color-surface-alt)] hover:bg-[var(--color-primary)] text-white font-medium rounded-lg transition-colors flex items-center gap-2"
-        >
-          {isSolved || isFailed ? (
-            <><FiArrowRight size={16} /> Next Puzzle</>
-          ) : (
-            <><FiRefreshCw size={16} /> Skip</>
-          )}
-        </button>
+        {showNextButton && (
+          <button
+            onClick={handleNewPuzzle}
+            className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+          >
+            <FiArrowRight size={16} /> Next Puzzle
+          </button>
+        )}
+        {showSkipButton && (
+          <button
+            onClick={handleNewPuzzle}
+            className="px-6 py-3 bg-[var(--color-surface-alt)] hover:bg-[var(--color-primary)] text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+          >
+            <FiRefreshCw size={16} /> Skip
+          </button>
+        )}
       </div>
     </div>
   );

@@ -35,6 +35,11 @@ export const puzzleService = {
     await api.post('/puzzles/generate', { difficulty, count });
   },
 
+  async getSolution(puzzleId: string): Promise<{ solutionLine: string[]; fen: string; mateIn: number }> {
+    const response = await api.get<{ solutionLine: string[]; fen: string; mateIn: number }>(`/puzzles/${puzzleId}/solution`);
+    return response.data;
+  },
+
   async getPoolStats(): Promise<PuzzlePoolStats> {
     const response = await api.get<PuzzlePoolStats>('/puzzles/stats');
     return response.data;

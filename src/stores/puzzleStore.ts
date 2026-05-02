@@ -12,10 +12,14 @@ interface PuzzleState {
   startTime: number | null;
   lastValidation: MoveValidationResponse | null;
   ratingChange: number | null;
+  solutionLine: string[] | null;
+  showingSolution: boolean;
   fetchPuzzle: (difficulty?: PuzzleDifficulty) => Promise<void>;
   validateMove: (move: string) => Promise<MoveValidationResponse>;
   solvePuzzle: () => Promise<void>;
   resetPuzzle: () => void;
+  retryPuzzle: () => void;
+  fetchSolution: () => Promise<string[] | null>;
 }
 
 export const usePuzzleStore = create<PuzzleState>((set, get) => ({
@@ -28,9 +32,11 @@ export const usePuzzleStore = create<PuzzleState>((set, get) => ({
   startTime: null,
   lastValidation: null,
   ratingChange: null,
+  solutionLine: null,
+  showingSolution: false,
 
   fetchPuzzle: async (difficulty?) => {
-    set({ isLoading: true, error: null, isSolved: false, isFailed: false, moveNumber: 1, lastValidation: null, ratingChange: null });
+    set({ isLoading: true, error: null, isSolved: false, isFailed: false, moveNumber: 1, lastValidation: null, ratingChange: null, solutionLine: null, showingSolution: false });
     try {
       const puzzle = await puzzleService.getNextPuzzle(difficulty);
       set({ currentPuzzle: puzzle, isLoading: false, startTime: Date.now() });
@@ -74,6 +80,34 @@ export const usePuzzleStore = create<PuzzleState>((set, get) => ({
     }
   },
 
+  retryPuzzle: () => {
+    set({
+      moveNumber: 1,
+      isFailed: false,
+      isSolved: false,
+      error: null,
+      lastValidation: null,
+      ratingChange: null,
+      solutionLine: null,
+      showingSolution: false,
+      startTime: Date.now(),
+    });
+  },
+
+  fetchSolution: async () => {
+    const { currentPuzzle } = get();
+    if (!currentPuzzle) return null;
+    try {
+      const data = await puzzleService.getSolution(currentPuzzle.id);
+      set({ solutionLine: data.solutionLine, showingSolution: true });
+      return data.solutionLine;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch solution';
+      set({ error: message });
+      return null;
+    }
+  },
+
   resetPuzzle: () => {
     set({
       currentPuzzle: null,
@@ -85,6 +119,8 @@ export const usePuzzleStore = create<PuzzleState>((set, get) => ({
       startTime: null,
       lastValidation: null,
       ratingChange: null,
+      solutionLine: null,
+      showingSolution: false,
     });
   },
 }));
