@@ -49,22 +49,16 @@ export const usePuzzleStore = create<PuzzleState>((set, get) => ({
   validateMove: async (move: string) => {
     const { currentPuzzle, moveNumber } = get();
     if (!currentPuzzle) throw new Error('No puzzle loaded');
-    try {
-      const result = await puzzleService.validateMove(currentPuzzle.id, { move, moveNumber });
-      if (result.correct) {
-        set({ moveNumber: moveNumber + 1, lastValidation: result });
-        if (result.puzzleComplete) {
-          set({ isSolved: true });
-        }
-      } else {
-        set({ isFailed: true, lastValidation: result });
+    const result = await puzzleService.validateMove(currentPuzzle.id, { move, moveNumber });
+    if (result.correct) {
+      set({ moveNumber: moveNumber + 1, lastValidation: result });
+      if (result.puzzleComplete) {
+        set({ isSolved: true });
       }
-      return result;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Validation failed';
-      set({ error: message });
-      throw err;
+    } else {
+      set({ isFailed: true, lastValidation: result });
     }
+    return result;
   },
 
   solvePuzzle: async () => {
